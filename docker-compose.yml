@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  scrape:
+    image: python:3.8-slim
+    command: bash -c "pip install -r requirements.txt && scrapy crawl flats_api"
+    volumes:
+      - type: bind
+        source: ./scraper
+        target: /code
+    working_dir: /code
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - backend
+
+  web:
+    image: python:3.8-slim
+    command: bash -c "apt-get update && apt-get install -y curl && pip install -r requirements.txt && gunicorn -b :5000 --reload app:app"
+    volumes:
+      - type: bind
+        source: ./web
+        target: /code
+    working_dir: /code
+    ports:
+      - "8080:5000"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/ok" ]
+      interval: 1s
+      timeout: 1s
+      retries: 60
+    depends_on:
+      - db
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_RUN_HOST=0.0.0.0
+      - DATABASE_URL=postgresql://user:passwd@db:5432/db
+    networks:
+      - backend
+
+  db:
+    image: postgres:13
+# optional - for backup after drop
+#    volumes:
+#      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=passwd
+      - POSTGRES_DB=db
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+# optional - for backup after drop
+#volumes:
+#  postgres_data:
